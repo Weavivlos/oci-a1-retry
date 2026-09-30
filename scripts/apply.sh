@@ -6,12 +6,14 @@
 set -u
 : "${OCI_STACK_ID:?OCI_STACK_ID is required}"
 
+# Keep stderr (waiter progress messages) out of the JSON on stdout.
+errf=$(mktemp)
 set +e
 out=$(oci resource-manager job create-apply-job \
   --stack-id "$OCI_STACK_ID" \
   --execution-plan-strategy AUTO_APPROVED \
   --wait-for-state SUCCEEDED --wait-for-state FAILED \
-  --max-wait-seconds 1500 2>&1)
+  --max-wait-seconds 1500 2>"$errf")
 set -e
 
 state=$(echo "$out" | jq -r '.data."lifecycle-state" // empty' 2>/dev/null || true)
@@ -26,6 +28,8 @@ fi
 if [ -z "$job_id" ]; then
   echo "Could not create/parse the apply job. CLI output:"
   echo "$out"
+  echo "--- stderr ---"
+  cat "$errf"
   exit 1
 fi
 
