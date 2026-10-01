@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run one Resource Manager apply job and report the outcome.
 # Exit 0 + done=false  -> failed only because of out-of-capacity (retry on next schedule)
+# Exit 0 + done=false  -> also used when OCI rate-limits job creation (HTTP 429)
 # Exit 0 + done=true   -> apply SUCCEEDED (workflow will disable itself)
 # Exit 1               -> failed for another reason (needs a human)
 set -u
@@ -26,6 +27,12 @@ if [ "$state" = "SUCCEEDED" ]; then
 fi
 
 if [ -z "$job_id" ]; then
+  # OCI throttles job creation (HTTP 429); treat as transient and retry later.
+  if grep -qE 'TooManyRequests|"status": 429' "$errf"; then
+    echo "Rate limited by OCI (429). Will retry on the next schedule."
+    echo "done=false" >> "$GITHUB_OUTPUT"
+    exit 0
+  fi
   echo "Could not create/parse the apply job. CLI output:"
   echo "$out"
   echo "--- stderr ---"
